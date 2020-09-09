@@ -1,10 +1,10 @@
 "use strict";
 
-const t = require("@babel/core").types;
-const convertProgramNode = require("./convertProgramNode");
+var t = require("@babel/types");
+var convertComments = require("./convertComments");
 
 module.exports = function(ast, traverse, code) {
-  const state = { source: code };
+  var state = { source: code };
 
   // Monkey patch visitor keys in order to be able to traverse the estree nodes
   t.VISITOR_KEYS.Property = t.VISITOR_KEYS.ObjectProperty;
@@ -20,32 +20,51 @@ module.exports = function(ast, traverse, code) {
 
   delete t.VISITOR_KEYS.Property;
   delete t.VISITOR_KEYS.MethodDefinition;
-
-  convertProgramNode(ast);
 };
 
-const astTransformVisitor = {
+var astTransformVisitor = {
   noScope: true,
   enter(path) {
-    const node = path.node;
+    var node = path.node;
 
     // private var to track original node type
     node._babelType = node.type;
 
     if (node.innerComments) {
+      node.trailingComments = node.innerComments;
       delete node.innerComments;
     }
 
     if (node.trailingComments) {
-      delete node.trailingComments;
+      convertComments(node.trailingComments);
     }
 
     if (node.leadingComments) {
-      delete node.leadingComments;
+      convertComments(node.leadingComments);
     }
   },
   exit(path) {
-    const node = path.node;
+    var node = path.node;
+
+    if (path.isJSXText()) {
+      node.type = "Literal";
+    }
+
+    if (
+      path.isRestElement() &&
+      path.parent &&
+      path.parent.type === "ObjectPattern"
+    ) {
+      node.type = "ExperimentalRestProperty";
+    }
+
+    if (
+      path.isSpreadElement() &&
+      path.parent &&
+      path.parent.type === "ObjectExpression"
+    ) {
+      node.type = "ExperimentalSpreadProperty";
+    }
 
     if (path.isTypeParameter()) {
       node.type = "Identifier";
@@ -79,8 +98,8 @@ const astTransformVisitor = {
 
     // template string range fixes
     if (path.isTemplateLiteral()) {
-      for (let j = 0; j < node.quasis.length; j++) {
-        const q = node.quasis[j];
+      for (var j = 0; j < node.quasis.length; j++) {
+        var q = node.quasis[j];
         q.range[0] -= 1;
         if (q.tail) {
           q.range[1] += 1;

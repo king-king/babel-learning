@@ -1,15 +1,27 @@
-"use strict";
+var assert = require("assert");
+var babelEslint = require("..");
+var espree = require("espree");
+var escope = require("eslint-scope");
+var util = require("util");
+var unpad = require("dedent");
+var assertImplementsAST = require("./fixtures/assert-implements-ast");
 
-const assert = require("assert");
-const babelEslint = require("../..");
-const espree = require("espree");
-const escope = require("eslint-scope");
-const unpad = require("dedent");
-const assertImplementsAST = require("../helpers/assert-implements-ast");
+function lookup(obj, keypath, backwardsDepth) {
+  if (!keypath) {
+    return obj;
+  }
+
+  return keypath
+    .split(".")
+    .slice(0, -1 * backwardsDepth)
+    .reduce((base, segment) => {
+      return base && base[segment], obj;
+    });
+}
 
 function parseAndAssertSame(code) {
   code = unpad(code);
-  const esAST = espree.parse(code, {
+  var esAST = espree.parse(code, {
     ecmaFeatures: {
       // enable JSX parsing
       jsx: true,
@@ -24,20 +36,39 @@ function parseAndAssertSame(code) {
     loc: true,
     range: true,
     comment: true,
+    attachComment: true,
     ecmaVersion: 2018,
     sourceType: "module",
   });
-  const babylonAST = babelEslint.parseForESLint(code, {
+  var babylonAST = babelEslint.parseForESLint(code, {
     eslintVisitorKeys: true,
     eslintScopeManager: true,
   }).ast;
-  assertImplementsAST(esAST, babylonAST);
+  try {
+    assertImplementsAST(esAST, babylonAST);
+  } catch (err) {
+    var traversal = err.message.slice(3, err.message.indexOf(":"));
+    err.message += unpad(`
+      espree:
+      ${util.inspect(lookup(esAST, traversal, 2), {
+        depth: err.depth,
+        colors: true,
+      })}
+      babel-eslint:
+      ${util.inspect(lookup(babylonAST, traversal, 2), {
+        depth: err.depth,
+        colors: true,
+      })}
+    `);
+    throw err;
+  }
+  //assert.equal(esAST, babylonAST);
 }
 
 describe("babylon-to-espree", () => {
   describe("compatibility", () => {
     it("should allow ast.analyze to be called without options", function() {
-      const esAST = babelEslint.parseForESLint("`test`", {
+      var esAST = babelEslint.parseForESLint("`test`", {
         eslintScopeManager: true,
         eslintVisitorKeys: true,
       }).ast;
@@ -230,17 +261,17 @@ describe("babylon-to-espree", () => {
   });
 
   it("export named", () => {
-    parseAndAssertSame("var foo = 1;export { foo };");
+    parseAndAssertSame("const foo = 1; export { foo };");
   });
 
   it("export named alias", () => {
-    parseAndAssertSame("var foo = 1;export { foo as bar };");
+    parseAndAssertSame("const foo = 1; export { foo as bar };");
   });
 
   // Espree doesn't support the optional chaining operator yet
   it("optional chaining operator (token)", () => {
     const code = "foo?.bar";
-    const babylonAST = babelEslint.parseForESLint(code, {
+    var babylonAST = babelEslint.parseForESLint(code, {
       eslintVisitorKeys: true,
       eslintScopeManager: true,
     }).ast;
@@ -250,7 +281,7 @@ describe("babylon-to-espree", () => {
   // Espree doesn't support the nullish coalescing operator yet
   it("nullish coalescing operator (token)", () => {
     const code = "foo ?? bar";
-    const babylonAST = babelEslint.parseForESLint(code, {
+    var babylonAST = babelEslint.parseForESLint(code, {
       eslintVisitorKeys: true,
       eslintScopeManager: true,
     }).ast;
@@ -260,22 +291,21 @@ describe("babylon-to-espree", () => {
   // Espree doesn't support the pipeline operator yet
   it("pipeline operator (token)", () => {
     const code = "foo |> bar";
-    const babylonAST = babelEslint.parseForESLint(code, {
+    var babylonAST = babelEslint.parseForESLint(code, {
       eslintVisitorKeys: true,
       eslintScopeManager: true,
     }).ast;
     assert.strictEqual(babylonAST.tokens[1].type, "Punctuator");
   });
 
-  // Espree doesn't support the private fields yet
-  it("hash (token)", () => {
-    const code = "class A { #x }";
+  // Espree doesn't support Flow enums
+  it("flow enums", () => {
+    const code = "enum E {A, B}";
     const babylonAST = babelEslint.parseForESLint(code, {
       eslintVisitorKeys: true,
       eslintScopeManager: true,
     }).ast;
-    assert.strictEqual(babylonAST.tokens[3].type, "Punctuator");
-    assert.strictEqual(babylonAST.tokens[3].value, "#");
+    assert.strictEqual(babylonAST.body[0].type, "EnumDeclaration");
   });
 
   it.skip("empty program with line comment", () => {
@@ -451,9 +481,7 @@ describe("babylon-to-espree", () => {
     });
 
     it("super outside method", () => {
-      assert.throws(() => {
-        parseAndAssertSame("function F() { super(); }");
-      }, /SyntaxError: 'super' keyword outside a method/);
+      parseAndAssertSame("function F() { super(); }");
     });
 
     it("StringLiteral", () => {
@@ -514,5 +542,14 @@ describe("babylon-to-espree", () => {
         }
       `);
     });
+  });
+});
+
+describe("Public API", () => {
+  it("exports a parseNoPatch function", () => {
+    assertImplementsAST(
+      espree.parse("foo"),
+      babelEslint.parseNoPatch("foo", {})
+    );
   });
 });

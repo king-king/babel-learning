@@ -1,23 +1,17 @@
-"use strict";
+var assert = require("assert");
+var eslint = require("eslint");
+var fs = require("fs");
+var path = require("path");
 
-const assert = require("assert");
-const eslint = require("eslint");
-const fs = require("fs");
-const path = require("path");
-
-const parser = require("../..");
-
-eslint.linter.defineParser("current-babel-eslint", parser);
-
-const paths = {
-  fixtures: path.join(__dirname, "..", "fixtures", "rules"),
+var paths = {
+  fixtures: path.join(__dirname, "fixtures", "rules"),
 };
 
-const encoding = "utf8";
-const errorLevel = 2;
+var encoding = "utf8";
+var errorLevel = 2;
 
-const baseEslintOpts = {
-  parser: "current-babel-eslint",
+var baseEslintOpts = {
+  parser: require.resolve(".."),
   parserOptions: {
     sourceType: "script",
   },
@@ -54,10 +48,10 @@ describe("Rules:", () => {
 // describe
 
 function strictSuite() {
-  const ruleId = "strict";
+  var ruleId = "strict";
 
   describe("when set to 'never'", () => {
-    const eslintOpts = Object.assign({}, baseEslintOpts, {
+    var eslintOpts = Object.assign({}, baseEslintOpts, {
       rules: {},
     });
     eslintOpts.rules[ruleId] = [errorLevel, "never"];
@@ -82,7 +76,7 @@ function strictSuite() {
   // describe
 
   describe("when set to 'global'", () => {
-    const eslintOpts = Object.assign({}, baseEslintOpts, {
+    var eslintOpts = Object.assign({}, baseEslintOpts, {
       rules: {},
     });
     eslintOpts.rules[ruleId] = [errorLevel, "global"];
@@ -158,7 +152,7 @@ function strictSuite() {
   // describe
 
   describe("when set to 'function'", () => {
-    const eslintOpts = Object.assign({}, baseEslintOpts, {
+    var eslintOpts = Object.assign({}, baseEslintOpts, {
       rules: {},
     });
     eslintOpts.rules[ruleId] = [errorLevel, "function"];
@@ -226,15 +220,64 @@ function strictSuite() {
     });
     // it
   });
-}
+  // describe
+  describe('When "codeFrame"', () => {
+    // Strip chalk colors, these are not relevant for the test
+    const stripAnsi = str =>
+      str.replace(
+        // eslint-disable-next-line no-control-regex
+        /[\u001b\u009b][[()#;?]*(?:[0-9]{1,4}(?:;[0-9]{0,4})*)?[0-9A-ORZcf-nqry=><]/g,
+        ""
+      );
 
-describe("https://github.com/babel/babel-eslint/issues/558", () => {
-  it("doesn't crash with eslint-plugin-import", () => {
-    const engine = new eslint.CLIEngine({ ignore: false });
-    engine.executeOnFiles([
-      "fixtures/eslint-plugin-import/a.js",
-      "fixtures/eslint-plugin-import/b.js",
-      "fixtures/eslint-plugin-import/c.js",
-    ]);
+    it("should display codeFrame when option is absent", done => {
+      lint(
+        {
+          fixture: ["syntax-error"],
+          eslint: baseEslintOpts,
+        },
+        (err, report) => {
+          if (err) return done(err);
+          assert(stripAnsi(report[0].message).indexOf("^\n  5 |") > -1);
+          done();
+        }
+      );
+    });
+
+    it("should display codeFrame when option is true", done => {
+      lint(
+        {
+          fixture: ["syntax-error"],
+          eslint: Object.assign({}, baseEslintOpts, {
+            parserOptions: {
+              codeFrame: true,
+            },
+          }),
+        },
+        (err, report) => {
+          if (err) return done(err);
+          assert(stripAnsi(report[0].message).indexOf("^\n  5 |") > -1);
+          done();
+        }
+      );
+    });
+
+    it("should not display codeFrame when option is false", done => {
+      lint(
+        {
+          fixture: ["syntax-error"],
+          eslint: Object.assign({}, baseEslintOpts, {
+            parserOptions: {
+              codeFrame: false,
+            },
+          }),
+        },
+        (err, report) => {
+          if (err) return done(err);
+          assert(stripAnsi(report[0].message).indexOf("^\n  5 |") === -1);
+          done();
+        }
+      );
+    });
   });
-});
+}

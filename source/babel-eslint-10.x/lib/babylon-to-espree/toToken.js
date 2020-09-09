@@ -1,7 +1,7 @@
 "use strict";
 
 module.exports = function(token, tt, source) {
-  const type = token.type;
+  var type = token.type;
   token.range = [token.start, token.end];
 
   if (type === tt.name) {
@@ -44,7 +44,6 @@ module.exports = function(token, tt, source) {
     type === tt.bang ||
     type === tt.tilde ||
     type === tt.doubleColon ||
-    type === tt.hash ||
     type.isAssign
   ) {
     token.type = "Punctuator";
@@ -73,7 +72,7 @@ module.exports = function(token, tt, source) {
     token.value = source.slice(token.start, token.end);
   } else if (type === tt.regexp) {
     token.type = "RegularExpression";
-    const value = token.value;
+    var value = token.value;
     token.regex = {
       pattern: value.pattern,
       flags: value.flags,

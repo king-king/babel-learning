@@ -1,10 +1,7 @@
+/*eslint-env mocha*/
 "use strict";
-
-const eslint = require("eslint");
-const path = require("path");
-const unpad = require("dedent");
-
-const parser = require("../..");
+var eslint = require("eslint");
+var unpad = require("dedent");
 
 function verifyAndAssertMessagesWithSpecificESLint(
   code,
@@ -14,28 +11,31 @@ function verifyAndAssertMessagesWithSpecificESLint(
   overrideConfig,
   linter
 ) {
-  const config = {
-    parser: "current-babel-eslint",
+  var config = {
+    parser: require.resolve(".."),
     rules,
     env: {
       node: true,
       es6: true,
     },
     parserOptions: {
-      sourceType,
+      ecmaVersion: 2018,
       ecmaFeatures: {
+        jsx: true,
+        experimentalObjectRestSpread: true,
         globalReturn: true,
       },
+      sourceType,
     },
   };
 
   if (overrideConfig) {
-    for (const key in overrideConfig) {
+    for (var key in overrideConfig) {
       config[key] = overrideConfig[key];
     }
   }
 
-  const messages = linter.verify(code, config);
+  var messages = linter.verify(code, config);
 
   if (messages.length !== expectedMessages.length) {
     throw new Error(
@@ -46,7 +46,7 @@ function verifyAndAssertMessagesWithSpecificESLint(
   }
 
   messages.forEach((message, i) => {
-    const formatedMessage = `${message.line}:${message.column} ${
+    var formatedMessage = `${message.line}:${message.column} ${
       message.message
     }${message.ruleId ? ` ${message.ruleId}` : ""}`;
     if (formatedMessage !== expectedMessages[i]) {
@@ -68,16 +68,13 @@ function verifyAndAssertMessages(
   sourceType,
   overrideConfig
 ) {
-  const linter = new eslint.Linter();
-  linter.defineParser("current-babel-eslint", parser);
-
   verifyAndAssertMessagesWithSpecificESLint(
     unpad(`${code}`),
     rules || {},
     expectedMessages || [],
     sourceType,
     overrideConfig,
-    linter
+    new eslint.Linter()
   );
 }
 
@@ -229,6 +226,24 @@ describe("verify", () => {
         `,
         { "no-unused-vars": 1, "no-undef": 1 },
         ["2:11 'Bar' is defined but never used. no-unused-vars"]
+      );
+    });
+
+    it("enum declaration", () => {
+      verifyAndAssertMessages(
+        `
+          enum E {
+            A,
+            B,
+          }
+          E.A;
+          enum UnusedEnum {
+            A,
+            B,
+          }
+        `,
+        { "no-unused-vars": 1, "no-undef": 1 },
+        ["6:6 'UnusedEnum' is defined but never used. no-unused-vars"]
       );
     });
 
@@ -1158,13 +1173,10 @@ describe("verify", () => {
     ) {
       const overrideConfig = {
         parserOptions: {
-          sourceType,
-          babelOptions: {
-            configFile: path.resolve(
-              __dirname,
-              "../fixtures/config/babel.config.decorators-legacy.js"
-            ),
+          ecmaFeatures: {
+            legacyDecorators: true,
           },
+          sourceType,
         },
       };
       return verifyAndAssertMessages(
